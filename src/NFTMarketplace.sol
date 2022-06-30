@@ -70,7 +70,7 @@ contract NFTMarketplace is ReentrancyGuard {
         uint tokenId = idToMarketItem[_itemId].tokenId;
         require(msg.value == price, "Submit the exact asking price");
 
-        (bool sent, bytes memory data) = idToMarketItem[_itemId].seller.call{value: msg.value}("");
+        (bool sent,) = idToMarketItem[_itemId].seller.call{value: msg.value}("");
         require(sent, "Failed to send value");
 
         IERC721(_nftContract).transferFrom(address(this), msg.sender, tokenId);
@@ -78,7 +78,7 @@ contract NFTMarketplace is ReentrancyGuard {
         idToMarketItem[_itemId].sold = true;
         _itemsSold.increment();
 
-        (bool approve, bytes memory text) = payable(owner).call{value: listingPrice}("");
+        (bool approve,) = payable(owner).call{value: listingPrice}("");
         require(approve, "Failed to send listing price");
         
     }
