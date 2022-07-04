@@ -85,6 +85,7 @@ contract NFTMarketplace is ERC721URIStorage, ReentrancyGuard {
         uint price = idToMarketItem[_tokenId].price;
         require(msg.value == price, "Please submit the asking price");
         address seller = idToMarketItem[_tokenId].seller;
+        // Sellers shouldn't buy their own items -> require(msg.sender != seller, "You can't buy your own item");
 
         idToMarketItem[_tokenId].owner = payable(msg.sender);
         idToMarketItem[_tokenId].sold = true;
@@ -175,14 +176,26 @@ contract NFTMarketplace is ERC721URIStorage, ReentrancyGuard {
         return listingPrice;
     }
 
-    // function burnAndRedeem(uint _itemId) public nonReentrant {
-    //     require(msg.sender == idToMarketItem[_itemId].owner, "You are not the owner");
-    //     uint tokenId = idToMarketItem[_itemId].tokenId;
-    //     _burn(tokenId); // Or _burn(_itemId)
+    function burnAndRedeem(uint _tokenId) public nonReentrant {
+        require(msg.sender == idToMarketItem[_tokenId].owner, "You are not the owner");
+        idToMarketItem[_tokenId].owner = payable(address(0));
+        _burn(_tokenId);
         
+        _tokenIds.increment();
+        uint256 newTokenId = _tokenIds.current();
+
+        _mint(msg.sender, newTokenId);
         
-    //     // Test if it really burns
-    //     // Test if it doesn't compromise fetch functions
-    //     // Create mint
-    // }
+        idToMarketItem[newTokenId] =  MarketItem(
+            newTokenId,
+            0,
+            payable(address(this)),
+            payable(msg.sender),
+            true
+        );
+
+        _itemsSold.increment();
+    }
+
+    // Function to change price after resell and withdraw resell order
 }
