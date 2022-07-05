@@ -97,7 +97,6 @@ contract NFTMarketplace is ERC721URIStorage, ReentrancyGuard {
 
         (bool sent,) = payable(seller).call{value: msg.value}("");
         require(sent, "Failed to send value");
-
     }
 
     // Returns all unsold market items
@@ -203,7 +202,14 @@ contract NFTMarketplace is ERC721URIStorage, ReentrancyGuard {
 
     function cancelSellOrder(uint256 _tokenId) public payable {
         require(idToMarketItem[_tokenId].seller == msg.sender, "You're not the seller");
-        idToMarketItem[_tokenId].price = 0;
-        buyToken(_tokenId);
+        
+        idToMarketItem[_tokenId].owner = payable(msg.sender);
+        idToMarketItem[_tokenId].sold = true;
+        idToMarketItem[_tokenId].seller = payable(address(0));
+        _itemsSold.increment();
+        _transfer(address(this), msg.sender, _tokenId);
+
+        (bool success,) = payable(owner).call{value: listingPrice}("");
+        require(success, "Failed to send listing price");
     }
 }
