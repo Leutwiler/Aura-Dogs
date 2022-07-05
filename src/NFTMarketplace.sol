@@ -85,7 +85,6 @@ contract NFTMarketplace is ERC721URIStorage, ReentrancyGuard {
         uint price = idToMarketItem[_tokenId].price;
         require(msg.value == price, "Please submit the asking price");
         address seller = idToMarketItem[_tokenId].seller;
-        // Sellers shouldn't buy their own items -> require(msg.sender != seller, "You can't buy your own item");
 
         idToMarketItem[_tokenId].owner = payable(msg.sender);
         idToMarketItem[_tokenId].sold = true;
@@ -197,5 +196,14 @@ contract NFTMarketplace is ERC721URIStorage, ReentrancyGuard {
         _itemsSold.increment();
     }
 
-    // Function to change price after resell and withdraw resell order
+    function changePrice(uint256 _tokenId, uint256 _newPrice) public {
+        require(idToMarketItem[_tokenId].seller == msg.sender, "You're not the seller");
+        idToMarketItem[_tokenId].price = _newPrice;
+    }
+
+    function cancelSellOrder(uint256 _tokenId) public payable {
+        require(idToMarketItem[_tokenId].seller == msg.sender, "You're not the seller");
+        idToMarketItem[_tokenId].price = 0;
+        buyToken(_tokenId);
+    }
 }
