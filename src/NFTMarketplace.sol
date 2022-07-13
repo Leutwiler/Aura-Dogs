@@ -35,6 +35,16 @@ contract NFTMarketplace is ERC721URIStorage, ReentrancyGuard {
         owner = payable(msg.sender);
     }
 
+    modifier onlySeller(uint256 _tokenId) {
+        require(idToMarketItem[_tokenId].seller == msg.sender, "You're not the seller");
+        _;
+    }
+
+    modifier onlyTokenOwner(uint256 _tokenId) {
+        require(idToMarketItem[_tokenId].owner == msg.sender, "You're not the owner");
+        _;
+    }
+
     function createToken(string memory _tokenURI, uint256 _price) public payable returns (uint) {
         _tokenIds.increment();
         uint256 newTokenId = _tokenIds.current();
@@ -68,9 +78,9 @@ contract NFTMarketplace is ERC721URIStorage, ReentrancyGuard {
         );
     }
 
-    function resellToken(uint256 _tokenId, uint256 _price) public payable {
-        require(idToMarketItem[_tokenId].owner == msg.sender, "You're not the owner");
+    function resellToken(uint256 _tokenId, uint256 _price) public payable onlyTokenOwner(_tokenId) {
         require(msg.value == listingPrice, "Price must be equal to listing price");
+        require(_price > 0, "Price can't be zero");
 
         idToMarketItem[_tokenId].sold = false;
         idToMarketItem[_tokenId].price = _price;
@@ -97,6 +107,48 @@ contract NFTMarketplace is ERC721URIStorage, ReentrancyGuard {
 
         (bool sent,) = payable(seller).call{value: msg.value}("");
         require(sent, "Failed to send value");
+    }
+
+    function changePrice(uint256 _tokenId, uint256 _newPrice) public onlySeller(_tokenId) {
+        require(_newPrice > 0, "Price can't be zero");
+        idToMarketItem[_tokenId].price = _newPrice;
+    }
+
+    function cancelSellOrder(uint256 _tokenId) public payable onlySeller(_tokenId) {        
+        idToMarketItem[_tokenId].owner = payable(msg.sender);
+        idToMarketItem[_tokenId].sold = true;
+        idToMarketItem[_tokenId].seller = payable(address(0));
+        _itemsSold.increment();
+        _transfer(address(this), msg.sender, _tokenId);
+
+        (bool success,) = payable(owner).call{value: listingPrice}("");
+        require(success, "Failed to send listing price");
+    }
+
+    function burn(uint _tokenId) public onlyTokenOwner(_tokenId) {
+        idToMarketItem[_tokenId].owner = payable(address(0));
+        _burn(_tokenId);
+    }
+
+    function burnAndRedeem(uint _tokenId, string memory _tokenURI) public onlyTokenOwner(_tokenId) nonReentrant {
+        idToMarketItem[_tokenId].owner = payable(address(0));
+        _burn(_tokenId);
+        
+        _tokenIds.increment();
+        uint256 newTokenId = _tokenIds.current();
+
+        _mint(msg.sender, newTokenId);
+        _setTokenURI(newTokenId, _tokenURI);
+        
+        idToMarketItem[newTokenId] =  MarketItem(
+            newTokenId,
+            0,
+            payable(address(this)),
+            payable(msg.sender),
+            true
+        );
+
+        _itemsSold.increment();
     }
 
     // Returns all unsold market items
@@ -165,57 +217,35 @@ contract NFTMarketplace is ERC721URIStorage, ReentrancyGuard {
         return items;
     }
 
-    function updateListingPrice(uint _listingPrice) public payable {
+    function fetchRedeemableNFTs() public view returns (MarketItem[] memory) {
+        uint totalItemCount = _tokenIds.current();
+        uint itemCount;
+        uint currentIndex;
+
+        for (uint i = 0; i < totalItemCount; i++) {
+            if (idToMarketItem[i + 1].price == 0) {
+            itemCount++;
+            }
+        }
+
+        MarketItem[] memory items = new MarketItem[](itemCount);
+        for (uint i = 0; i < totalItemCount; i++) {
+            if (idToMarketItem[i + 1].price == 0) {
+            uint currentId = i + 1;
+            MarketItem storage currentItem = idToMarketItem[currentId];
+            items[currentIndex] = currentItem;
+            currentIndex++;
+            }
+        }
+        return items;
+    }
+
+    function updateListingPrice(uint _listingPrice) public {
         require(owner == msg.sender, "Only marketplace owner can update listing price");
         listingPrice = _listingPrice;
     }
 
     function getListingPrice() public view returns (uint256) {
         return listingPrice;
-    }
-
-    function burnAndRedeem(uint _tokenId) public nonReentrant {
-        require(msg.sender == idToMarketItem[_tokenId].owner, "You are not the owner");
-        idToMarketItem[_tokenId].owner = payable(address(0));
-        _burn(_tokenId);
-        
-        _tokenIds.increment();
-        uint256 newTokenId = _tokenIds.current();
-
-        _mint(msg.sender, newTokenId);
-        
-        idToMarketItem[newTokenId] =  MarketItem(
-            newTokenId,
-            0,
-            payable(address(this)),
-            payable(msg.sender),
-            true
-        );
-
-        _itemsSold.increment();
-    }
-
-    function burn(uint _tokenId) public {
-        require(msg.sender == idToMarketItem[_tokenId].owner, "You are not the owner");
-        idToMarketItem[_tokenId].owner = payable(address(0));
-        _burn(_tokenId);
-    }
-
-    function changePrice(uint256 _tokenId, uint256 _newPrice) public {
-        require(idToMarketItem[_tokenId].seller == msg.sender, "You're not the seller");
-        idToMarketItem[_tokenId].price = _newPrice;
-    }
-
-    function cancelSellOrder(uint256 _tokenId) public payable {
-        require(idToMarketItem[_tokenId].seller == msg.sender, "You're not the seller");
-        
-        idToMarketItem[_tokenId].owner = payable(msg.sender);
-        idToMarketItem[_tokenId].sold = true;
-        idToMarketItem[_tokenId].seller = payable(address(0));
-        _itemsSold.increment();
-        _transfer(address(this), msg.sender, _tokenId);
-
-        (bool success,) = payable(owner).call{value: listingPrice}("");
-        require(success, "Failed to send listing price");
     }
 }
